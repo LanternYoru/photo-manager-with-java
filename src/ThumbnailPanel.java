@@ -83,9 +83,12 @@ public class ThumbnailPanel extends JPanel {
                             thumb.addMouseListener(new MouseAdapter() {
                                 public void mouseReleased(MouseEvent e) {
                                     if (e.isPopupTrigger()) {
-                                        thumb.setSelected(true);
-                                        selectedThumbs.clear();
-                                        selectedThumbs.add(thumb);
+                                        // 添加当前缩略图到选中列表（如果未选中）
+                                        if (!thumb.isSelected()) {
+                                            thumb.setSelected(true);
+                                            selectedThumbs.add(thumb);
+                                        }
+                                        // 保持其他已选中的缩略图状态不变
                                         createContextMenu(e);
                                     }
                                 }
@@ -182,13 +185,24 @@ public class ThumbnailPanel extends JPanel {
             Thumbnail thumb = (Thumbnail) e.getSource();
             if (SwingUtilities.isLeftMouseButton(e)) {
                 if (e.isControlDown()) {
+                    // Ctrl+点击：切换选中状态
                     thumb.toggleSelected();
-                } else {
-                    selectedThumbs.forEach(t -> t.setSelected(false));
+                    if (thumb.isSelected()) {
+                        selectedThumbs.add(thumb);
+                    } else {
+                        selectedThumbs.remove(thumb);
+                    }
+                } else if (e.isShiftDown()) {
+                    // Shift+点击：范围选择（待实现）
                     thumb.setSelected(true);
+                    selectedThumbs.add(thumb);
+                } else {
+                    // 普通点击：单选模式
+                    selectedThumbs.forEach(t -> t.setSelected(false));
+                    selectedThumbs.clear();
+                    thumb.setSelected(true);
+                    selectedThumbs.add(thumb);
                 }
-                selectedThumbs.removeIf(t -> !t.isSelected());
-                if (thumb.isSelected()) selectedThumbs.add(thumb);
                 infoUpdater.updateInfo("选中: " + selectedThumbs.size() + " 张图片");
             }
         }
