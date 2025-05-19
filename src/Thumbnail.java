@@ -33,4 +33,9 @@ public class Thumbnail extends JPanel {
             g.drawRect(1, 1, getWidth() - 3, getHeight() - 3);
         }
     }
+
+
+    public File getFile() {
+        return new File(getName());
+    }
 }

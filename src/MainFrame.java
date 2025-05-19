@@ -15,8 +15,9 @@ public class MainFrame extends JFrame {
     private ThumbnailPanel thumbnailPanel;
     private JLabel infoLabel;
     public MainFrame() {
-        initUI();
+        // 先构建目录树再初始化UI组件
         buildDirectoryTree();
+        initUI();
     }
 
     private void initUI() {
@@ -24,9 +25,8 @@ public class MainFrame extends JFrame {
         setSize(1000, 600);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLayout(new BorderLayout());
-        buildDirectoryTree(); // 新增：确保在界面初始化时构建目录树
 
-        // 目录树区域
+        // 目录树区域（移到buildDirectoryTree之后）
         JScrollPane treeScroll = new JScrollPane(directoryTree);
         treeScroll.setPreferredSize(new Dimension(200, 0));
         add(treeScroll, BorderLayout.WEST);
@@ -69,7 +69,8 @@ public class MainFrame extends JFrame {
         }
 
         directoryTree = new JTree(root);
-        directoryTree.setShowsRootHandles(true); // 关键：显示根节点展开手柄
+        directoryTree.setCellRenderer(new DirectoryTreeCellRenderer()); // 应用自定义渲染器
+        directoryTree.setShowsRootHandles(true);
         directoryTree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
 
         // 添加目录选择监听器
@@ -102,15 +103,39 @@ public class MainFrame extends JFrame {
 
     private void loadSubDirectories(DefaultMutableTreeNode parent) {
         File dir = ((FileNode) parent.getUserObject()).getFile();
-        File[] subDirs = dir.listFiles(File::isDirectory);
-        if (subDirs != null) {
-            for (File subDir : subDirs) {
-                // 为每个目录添加一个空的占位节点（避免卡顿）
-                DefaultMutableTreeNode child = new DefaultMutableTreeNode(new FileNode(subDir));
-                child.add(new DefaultMutableTreeNode("Loading...")); // 占位节点
-                parent.add(child);
+        File[] children = dir.listFiles();
+        if (children != null) {
+            // 先添加子目录
+            for (File childFile : children) {
+                if (childFile.isDirectory() && childFile.canRead()) {
+                    DefaultMutableTreeNode childNode = new DefaultMutableTreeNode(new FileNode(childFile));
+                    childNode.add(new DefaultMutableTreeNode("Loading...")); // 占位节点
+                    parent.add(childNode);
+                    System.out.println("添加目录节点: " + childFile.getAbsolutePath());
+                }
+            }
+            // 添加所有层级的图片文件并记录完整路径
+            for (File childFile : children) {
+                if (isImageFile(childFile)) {
+                    parent.add(new DefaultMutableTreeNode(new FileNode(childFile)));
+                    System.out.println("添加图片文件: " + childFile.getAbsolutePath());
+                }
+            }
+            // 安全刷新树节点显示
+            if (directoryTree != null) {
+                TreeModel model = directoryTree.getModel();
+                if (model instanceof DefaultTreeModel) {
+                    ((DefaultTreeModel) model).reload(parent);
+                }
             }
         }
+    }
+
+    private boolean isImageFile(File file) {
+        String name = file.getName().toLowerCase();
+        return name.endsWith(".jpg") || name.endsWith(".jpeg")
+            || name.endsWith(".png") || name.endsWith(".gif")
+            || name.endsWith(".bmp");
     }
 
     public static void main(String[] args) {
@@ -122,6 +147,27 @@ class FileNode {
     private File file;
     public FileNode(File file) { this.file = file; }
     public File getFile() { return file; }
+    public boolean isDirectory() { return file.isDirectory(); }
     @Override
     public String toString() { return file.getName(); }
+}
+
+// 自定义目录树节点渲染器
+class DirectoryTreeCellRenderer extends DefaultTreeCellRenderer {
+    private Icon directoryIcon = UIManager.getIcon("FileView.directoryIcon");
+    private Icon fileIcon = UIManager.getIcon("FileView.fileIcon");
+    
+    @Override
+    public Component getTreeCellRendererComponent(JTree tree, Object value,
+        boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
+        
+        super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+        
+        DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+        if (node.getUserObject() instanceof FileNode) {
+            FileNode fileNode = (FileNode) node.getUserObject();
+            setIcon(fileNode.isDirectory() ? directoryIcon : fileIcon);
+        }
+        return this;
+    }
 }
