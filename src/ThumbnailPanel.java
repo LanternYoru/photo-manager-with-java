@@ -39,90 +39,133 @@ public class ThumbnailPanel extends JPanel {
         });
     }
 
+    private SwingWorker<Void, Thumbnail> currentWorker;
+    
     public void loadImages(File dir) {
-        // 添加目录验证和日志
-        if (dir == null || !dir.isDirectory() || !dir.canRead()) {
-            System.err.println("无效目录: " + (dir != null ? dir.getAbsolutePath() : "null"));
-            return;
+        // 取消之前的加载任务
+        if (currentWorker != null && !currentWorker.isDone()) {
+            currentWorker.cancel(true);
         }
-        System.out.println("正在加载目录: " + dir.getAbsolutePath());
-        
+
+        // 初始化界面（移除加载提示）
         this.currentDirectory = dir;
         removeAll();
         imageFiles.clear();
         selectedThumbs.clear();
-        
-        File[] files = dir.listFiles(f -> {
-            String name = f.getName().toLowerCase();
-            return f.isFile() && (name.endsWith(".jpg") || name.endsWith(".jpeg")
-                || name.endsWith(".png") || name.endsWith(".gif")
-                || name.endsWith(".bmp"));
-        });
-        
-        if (files != null) {
-            // 直接添加文件到列表，确保顺序和数量准确
-            for (File file : files) {
-                if (addThumbnail(file)) {
-                    imageFiles.add(file);
-                }
-            }
-        }
-        
-        // 强制更新布局和重绘
         revalidate();
         repaint();
+
+        // 创建后台加载任务
+        currentWorker = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                File[] files = dir.listFiles(f -> {
+                    String name = f.getName().toLowerCase();
+                    return f.isFile() && (name.endsWith(".jpg") || name.endsWith(".jpeg")
+                        || name.endsWith(".png") || name.endsWith(".gif")
+                        || name.endsWith(".bmp"));
+                });
+
+                if (files != null) {
+                    for (File file : files) {
+                        if (isCancelled()) return null;
+                        
+                        try {
+                            BufferedImage original = ImageIO.read(file);
+                            if (original == null) continue;
+                            
+                            int width = THUMB_SIZE;
+                            int height = (int) ((double) original.getHeight() / original.getWidth() * THUMB_SIZE);
+                            Image scaled = original.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+                            Thumbnail thumb = new Thumbnail(new ImageIcon(scaled), file);
+                            // 添加事件监听器
+                            thumb.addMouseListener(new ThumbnailClickListener());
+                            thumb.addMouseListener(new MouseAdapter() {
+                                public void mouseReleased(MouseEvent e) {
+                                    if (e.isPopupTrigger()) {
+                                        thumb.setSelected(true);
+                                        selectedThumbs.clear();
+                                        selectedThumbs.add(thumb);
+                                        createContextMenu(e);
+                                    }
+                                }
+                                
+                                @Override
+                                public void mouseClicked(MouseEvent e) {
+                                    if (e.getClickCount() == 2) { // 双击事件
+                                        int index = imageFiles.indexOf(file);
+                                        new SlideShowDialog(
+                                            (JFrame)SwingUtilities.getWindowAncestor(ThumbnailPanel.this),
+                                            imageFiles,
+                                            index
+                                        ).setVisible(true);
+                                    }
+                                }
+                            });
+                            
+                            // 分批发布缩略图
+                            publish(thumb);
+                            imageFiles.add(file);
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            protected void process(List<Thumbnail> chunks) {
+                if (isCancelled()) return;
+                
+                // 增量更新而不是清除全部
+                for (Thumbnail thumb : chunks) {
+                    add(thumb);
+                }
+                // 优化刷新频率，每批更新后只刷新一次
+                if (!chunks.isEmpty()) {
+                    revalidate();
+                    repaint();
+                }
+            }
+
+            @Override
+            protected void done() {
+                if (!isCancelled()) {
+                    updateInfo(dir);
+                    // 确保最终刷新界面
+                    EventQueue.invokeLater(() -> {
+                        removeAll();
+                        for (Thumbnail thumb : getThumbnails()) {
+                            add(thumb);
+                            // 确保事件监听器存在
+                            if (thumb.getMouseListeners().length == 0) {
+                                thumb.addMouseListener(new ThumbnailClickListener());
+                            }
+                        }
+                        revalidate();
+                        repaint();
+                    });
+                }
+            }
+            
+            private List<Thumbnail> getThumbnails() {
+                List<Thumbnail> thumbs = new ArrayList<>();
+                for (Component comp : getComponents()) {
+                    if (comp instanceof Thumbnail) {
+                        thumbs.add((Thumbnail) comp);
+                    }
+                }
+                return thumbs;
+            }
+        };
         
-        // 立即更新信息
-        updateInfo(dir);
+        currentWorker.execute();
     }
 
     private boolean addThumbnail(File file) {
-        try {
-            BufferedImage original = ImageIO.read(file);
-            if (original == null) {
-                return false; // 无效的图片文件
-            }
-            // 保持宽高比缩放，固定宽度为THUMB_SIZE
-            int width = THUMB_SIZE;
-            int height = (int) ((double) original.getHeight() / original.getWidth() * THUMB_SIZE);
-            Image scaled = original.getScaledInstance(width, height, Image.SCALE_SMOOTH);
-            Thumbnail thumb = new Thumbnail(new ImageIcon(scaled), file);
-            thumb.addMouseListener(new ThumbnailClickListener());
-            // 为每个缩略图添加右键菜单支持
-            thumb.addMouseListener(new MouseAdapter() {
-                public void mouseReleased(MouseEvent e) {
-                    if (e.isPopupTrigger()) {
-                        // 选中当前缩略图
-                        thumb.setSelected(true);
-                        selectedThumbs.clear();
-                        selectedThumbs.add(thumb);
-                        createContextMenu(e);
-                    }
-                }
-            });
-            add(thumb);
-            add(Box.createVerticalStrut(10)); // 添加垂直间距
-            
-            // 添加双击事件监听
-            thumb.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mouseClicked(MouseEvent e) {
-                    if (e.getClickCount() == 2) { // 双击事件
-                        int index = imageFiles.indexOf(file);
-                        new SlideShowDialog(
-                            (JFrame)SwingUtilities.getWindowAncestor(ThumbnailPanel.this),
-                            imageFiles,
-                            index
-                        ).setVisible(true);
-                    }
-                }
-            });
-            return true; // 成功添加缩略图
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false; // 添加缩略图失败
-        }
+        // 此方法已被后台加载机制替代
+        return false;
     }
 
     private void updateInfo(File dir) {
