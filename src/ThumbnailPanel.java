@@ -29,9 +29,10 @@ public class ThumbnailPanel extends JPanel {
         addMouseMotionListener(new SelectionMouseListener());
         
         // 添加右键菜单支持
+        // 面板自身的右键菜单（用于空白区域粘贴）
         addMouseListener(new MouseAdapter() {
             public void mouseReleased(MouseEvent e) {
-                if (e.isPopupTrigger()) {
+                if (e.isPopupTrigger() && e.getComponent() instanceof ThumbnailPanel) {
                     createContextMenu(e);
                 }
             }
@@ -87,6 +88,18 @@ public class ThumbnailPanel extends JPanel {
             Image scaled = original.getScaledInstance(width, height, Image.SCALE_SMOOTH);
             Thumbnail thumb = new Thumbnail(new ImageIcon(scaled), file);
             thumb.addMouseListener(new ThumbnailClickListener());
+            // 为每个缩略图添加右键菜单支持
+            thumb.addMouseListener(new MouseAdapter() {
+                public void mouseReleased(MouseEvent e) {
+                    if (e.isPopupTrigger()) {
+                        // 选中当前缩略图
+                        thumb.setSelected(true);
+                        selectedThumbs.clear();
+                        selectedThumbs.add(thumb);
+                        createContextMenu(e);
+                    }
+                }
+            });
             add(thumb);
             add(Box.createVerticalStrut(10)); // 添加垂直间距
             
