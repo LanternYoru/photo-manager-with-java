@@ -258,6 +258,11 @@ public class ThumbnailPanel extends JPanel {
         pasteItem.addActionListener(evt -> pasteFiles());
         menu.add(pasteItem);
 
+        // 删除菜单项
+        JMenuItem delItem = new JMenuItem("删除");
+        delItem.addActionListener(evt -> delSelectedFiles());
+        menu.add(delItem);
+
         // 重命名菜单项
         JMenuItem renameItem = new JMenuItem("重命名");
         renameItem.setEnabled(selectedThumbs.size() == 1);
@@ -292,6 +297,20 @@ public class ThumbnailPanel extends JPanel {
             }, null);
             infoUpdater.updateInfo("已复制 " + filesToCopy.size() + " 个文件");
         }
+    }
+    private void delSelectedFiles() {
+        List<File> filesToDelete = new ArrayList<>();
+        for (Thumbnail thumb : selectedThumbs) {
+            filesToDelete.add(thumb.getFile());
+        }
+        if (!filesToDelete.isEmpty()) {
+            for (File file : filesToDelete) {
+                file.delete();
+            }
+        }
+        loadImages(currentDirectory);
+        infoUpdater.updateInfo("删除完成");
+
     }
 
     private void pasteFiles() {
