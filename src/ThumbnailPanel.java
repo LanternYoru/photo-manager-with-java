@@ -134,18 +134,9 @@ public class ThumbnailPanel extends JPanel {
                 if (!isCancelled()) {
                     updateInfo(dir);
                     // 确保最终刷新界面
-                    EventQueue.invokeLater(() -> {
-                        removeAll();
-                        for (Thumbnail thumb : getThumbnails()) {
-                            add(thumb);
-                            // 确保事件监听器存在
-                            if (thumb.getMouseListeners().length == 0) {
-                                thumb.addMouseListener(new ThumbnailClickListener());
-                            }
-                        }
-                        revalidate();
-                        repaint();
-                    });
+                    // 最终刷新界面
+                    revalidate();
+                    repaint();
                 }
             }
             
