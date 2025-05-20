@@ -5,6 +5,7 @@ import java.awt.event.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.TypeVariable;
 import java.nio.file.Files;
 import java.awt.datatransfer.DataFlavor;
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ public class ThumbnailPanel extends JPanel {
     private File currentDirectory;
     private java.awt.datatransfer.Clipboard clipboard = 
         Toolkit.getDefaultToolkit().getSystemClipboard();
+    private int lastSelectedIndex = -1; // 初始化最后选中索引
 
     private List<File> imageFiles = new ArrayList<>();
     private List<Thumbnail> selectedThumbs = new ArrayList<>();
@@ -27,6 +29,26 @@ public class ThumbnailPanel extends JPanel {
         setLayout(new WrapLayout(FlowLayout.LEFT, 10, 10));
         addMouseListener(new SelectionMouseListener());
         addMouseMotionListener(new SelectionMouseListener());
+        // 添加空白区域点击支持
+        addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    boolean clickedOnThumbnail = false;
+                    for (Component comp : getComponents()) {
+                        if (comp instanceof Thumbnail && comp.getBounds().contains(e.getPoint())) {
+                            clickedOnThumbnail = true;
+                            break;
+                        }
+                    }
+                    if (!clickedOnThumbnail) {
+                        selectedThumbs.forEach(t -> t.setSelected(false));
+                        selectedThumbs.clear();
+                        repaint();
+                    }
+                }
+            }
+        });
         
         // 添加右键菜单支持
         // 面板自身的右键菜单（用于空白区域粘贴）
@@ -184,6 +206,15 @@ public class ThumbnailPanel extends JPanel {
         public void mouseClicked(MouseEvent e) {
             Thumbnail thumb = (Thumbnail) e.getSource();
             if (SwingUtilities.isLeftMouseButton(e)) {
+                Component[] components = getComponents();
+                List<Thumbnail> thumbs = new ArrayList<>();
+                for (Component comp : components) {
+                    if (comp instanceof Thumbnail) {
+                        thumbs.add((Thumbnail) comp);
+                    }
+                }
+                int currentIndex = thumbs.indexOf(thumb);
+
                 if (e.isControlDown()) {
                     // Ctrl+点击：切换选中状态
                     thumb.toggleSelected();
@@ -192,17 +223,26 @@ public class ThumbnailPanel extends JPanel {
                     } else {
                         selectedThumbs.remove(thumb);
                     }
-                } else if (e.isShiftDown()) {
-                    // Shift+点击：范围选择（待实现）
-                    thumb.setSelected(true);
-                    selectedThumbs.add(thumb);
+                } else if (e.isShiftDown() && lastSelectedIndex != -1) {
+                    // Shift+点击：范围选择
+                    int start = Math.min(lastSelectedIndex, currentIndex);
+                    int end = Math.max(lastSelectedIndex, currentIndex);
+                    for (int i = start; i <= end; i++) {
+                        Thumbnail t = thumbs.get(i);
+                        t.setSelected(true);
+                        if (!selectedThumbs.contains(t)) {
+                            selectedThumbs.add(t);
+                        }
+                    }
                 } else {
                     // 普通点击：单选模式
                     selectedThumbs.forEach(t -> t.setSelected(false));
                     selectedThumbs.clear();
                     thumb.setSelected(true);
                     selectedThumbs.add(thumb);
+                    lastSelectedIndex = currentIndex; // 记录最后选中索引
                 }
+
                 infoUpdater.updateInfo("选中: " + selectedThumbs.size() + " 张图片");
             }
         }
